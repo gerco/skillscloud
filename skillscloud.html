@@ -1,0 +1,351 @@
+<!doctype html>
+<html>
+<head>
+		<meta charset="utf-8">
+		<title>Skills Cloud Generator</title>
+		<script src="bower_components/jquery/dist/jquery.js"></script>
+		<link href="bower_components/bootstrap/dist/css/bootstrap.css" rel="stylesheet">
+		<link href="bower_components/bootstrap/dist/css/bootstrap-theme.css" rel="stylesheet">
+		<script src="bower_components/bootstrap/dist/js/bootstrap.js"></script>
+		<script>
+			function getLevelSettings(level) {
+				var row = $("#settingslevel" + level);
+				return {
+					"size": row.find("input[name='size']").val(),
+					"color": row.find("input[name='color']").val(),
+				};
+			}
+
+			function splitSkills(skills) {
+				return skills.split(",");
+			}
+
+			function joinSkills(skills) {
+				return skills.join(",");
+			}
+
+			function gatherSkills() {
+					var skills = {
+						"level1": splitSkills($("#level1skills").val()),
+						"level2": splitSkills($("#level2skills").val()),
+						"level3": splitSkills($("#level3skills").val()),
+						"level4": splitSkills($("#level4skills").val()),
+						"level5": splitSkills($("#level5skills").val()),
+						"level6": splitSkills($("#level6skills").val()),
+					};
+
+					saveSkillsToLocalStorage(skills);
+
+					return skills;
+			}
+
+			function gatherSettings() {
+					var settings = {
+						"level1": getLevelSettings(1),
+						"level2": getLevelSettings(1),
+						"level3": getLevelSettings(1),
+						"level4": getLevelSettings(1),
+						"level5": getLevelSettings(1),
+						"level6": getLevelSettings(1),
+					};
+
+					saveSettingsToLocalStorage(settings);
+
+					return settings;
+			}
+
+			function saveSkillsToLocalStorage(skills) {
+					// If we have localStorage, store the skills there
+					if(localStorage) {
+						localStorage.setItem("skills", JSON.stringify(skills));
+					}
+			}
+
+			function saveSettingsToLocalStorage(skills) {
+					// If we have localStorage, store the settings there
+					if(localStorage) {
+						localStorage.setItem("settings", JSON.stringify(settings));
+					}
+			}
+
+			function restoreFromLocalStorage() {
+				if(localStorage) {
+					if("skills" in localStorage) try {
+						var skillsStr = localStorage.getItem("skills");
+						$("#rawjson").val(skillsStr);
+
+						var skills = JSON.parse(skillsStr);
+						setSkillsFields(skills);
+					} catch (err) {
+						console.log(err);
+					}
+				
+					var settings = {};	
+					if("settings" in localStorage) try {
+						var settingsStr = localStorage.getItem("settings");
+						var settings = JSON.parse(settingsStr);
+					} catch (err) {
+						console.log(err);		
+					}
+					setSettingsFields(settings);
+				}
+			}
+
+			function setSkillsFields(skills) {
+					$("#level1skills").val(joinSkills(skills.level1));
+					$("#level2skills").val(joinSkills(skills.level2));
+					$("#level3skills").val(joinSkills(skills.level3));
+					$("#level4skills").val(joinSkills(skills.level4));
+					$("#level5skills").val(joinSkills(skills.level5));
+					$("#level6skills").val(joinSkills(skills.level6));
+			}
+
+			function setSettingsFields(settings) {
+				setLevelSettings(1, settings.level1);
+				setLevelSettings(2, settings.level2);
+				setLevelSettings(3, settings.level3);
+				setLevelSettings(4, settings.level4);
+				setLevelSettings(5, settings.level5);
+				setLevelSettings(6, settings.level6);
+			}
+
+			function setLevelSettings(level, setting) {
+				var row = $("settingslevel" + level);
+				if(setting.size > 0) {
+					row.find("input[name='size']").val(setting.size);
+				} else {
+					row.find("input[name='size']").val(60 + level*40);
+				}
+				if(setting.color != "") {
+					row.find("input[name='color']").val(setting.color);	
+				}
+			}
+
+			function objectifySkill(skill, level) {
+				return { "skill": skill, "level": level }
+			}
+
+			function createSkillsCloud(skills) {
+				// First turn each skill into its own object
+				var allSkills = [];
+				skills.level1.forEach(function(v, i, arr) { allSkills.push(objectifySkill(v, 1)); })
+				skills.level2.forEach(function(v, i, arr) { allSkills.push(objectifySkill(v, 2)); })
+				skills.level3.forEach(function(v, i, arr) { allSkills.push(objectifySkill(v, 3)); })
+				skills.level4.forEach(function(v, i, arr) { allSkills.push(objectifySkill(v, 4)); })
+				skills.level5.forEach(function(v, i, arr) { allSkills.push(objectifySkill(v, 5)); })
+				skills.level6.forEach(function(v, i, arr) { allSkills.push(objectifySkill(v, 6)); })
+				
+				// Sort the skills array alphabetically by skill name
+				allSkills.sort(function(a, b) { return a.skill.localeCompare(b.skill); });
+
+				// Now generate HTML for all skills
+				var allHtml = [];
+				allSkills.forEach(function(skill, index, allSkills) {
+					if(skill.skill == "") { return; }
+					allHtml.push('<span class="skilllevel' + skill.level + '">' + skill.skill + '</span>');
+				});	
+				
+				var html = allHtml.join(" &middot; ");
+				return html;
+			}
+
+			function generate() {
+				// Generate the JSON from the skills list
+				var skills = gatherSkills();
+				$("#rawjson").val(JSON.stringify(skills));
+				$("#rawjson-error").hide();
+
+				// Generate the HTML for the skills cloud
+				var html = createSkillsCloud(skills);
+				$("#outputdiv").html(html);
+
+				// Open the panel and scroll the view to it
+				openPanel($("#outputpanel span.clickable"));
+				closePanel($("#skillspanel span.clickable"));
+				closePanel($("#settingspanel span.clickable"));
+				$("html, body").animate({
+					scrollTop: $("#outputpanel").offset().top
+				}, 1000);
+			};
+
+			function parseJson() {
+				var parseError = $("#rawjson-error");
+				try {
+					parseError.hide();
+					var skillsStr = $("#rawjson").val();
+					var skills = JSON.parse(skillsStr);
+					setSkillsFields(skills);
+				} catch(err) {
+					parseError.text(err);
+					parseError.show();
+				}
+			}
+
+			function togglePanel(element) {
+				var $this = $(element);
+				if (!$this.hasClass('panel-collapsed')) {
+					closePanel($this);
+				} else {
+					openPanel($this);
+	 		 	}
+			}
+
+			function closePanel(panel) {
+				panel.parents('.panel').find('.panel-body').slideUp();
+				panel.addClass('panel-collapsed');
+				panel.find('i').removeClass('glyphicon-minus').addClass('glyphicon-plus');
+			}
+
+			function openPanel(panel) {
+				panel.parents('.panel').find('.panel-body').slideDown();
+				panel.removeClass('panel-collapsed');
+				panel.find('i').removeClass('glyphicon-plus').addClass('glyphicon-minus');
+			}
+
+			// Document 'ready' function to delegate to functions above
+			$(function() {
+				$("#generate").click(generate);
+				$("#parsejson").click(parseJson);
+				$(".panel-heading span.clickable").click(function (e) { togglePanel(this); });
+			}); 
+
+			$(window).load(restoreFromLocalStorage);
+		</script>
+		<style>
+			.skilllevel1 { font-size: 100%; color: #bbbbbb; }
+			.skilllevel2 { font-size: 140%; color: #999999; }
+			.skilllevel3 { font-size: 180%; color: #777777; }
+			.skilllevel4 { font-size: 220%; color: #555555; }
+			.skilllevel5 { font-size: 260%; color: #333333; }
+			.skilllevel6 { font-size: 300%; color: #111111; }
+		</style>
+</head>
+<body>
+	<div class="container">
+		<div class="jumbotron">
+			<h1>R&eacute;sum&eacute; Skills Cloud Generator</h1>
+			<p class="lead">
+				Enter your skills in the appropriate text boxes below separated by commas. Click the generate button to 
+				create your skills cloud. You can save the JSON data in a text file to be able to save/load your skills at
+				a later time.
+			</p>
+		</div> <!-- jumbotron -->
+
+		<div class="row">
+			<div class="col-md-6">
+	 		 	<div id="skillspanel" class="panel panel-default">
+	 			 	<div class="panel-heading">
+	 				 	<div class="panel-title">
+							Skills
+							<span class="pull-right clickable"><i class="glyphicon glyphicon-minus"></i></span>
+						</div>
+	 			 	</div> <!-- panel-heading -->
+	 			 	<div class="panel-body">
+	 				 	<p>Level 1 skills (least important)</p>
+	 				 	<textarea id="level1skills" rows="2", cols="60"></textarea>
+	 				 	<p>Level 2 skills</p>
+	 				 	<textarea id="level2skills" rows="2", cols="60"></textarea>
+	 				 	<p>Level 3 skills</p>
+	 				 	<textarea id="level3skills" rows="2", cols="60"></textarea>
+	 				 	<p>Level 4 skills</p>
+	 				 	<textarea id="level4skills" rows="2", cols="60"></textarea>
+	 				 	<p>Level 5 skills</p>
+	 				 	<textarea id="level5skills" rows="2", cols="60"></textarea>
+	 				 	<p>Level 6 skills (most important)</p>
+	 				 	<textarea id="level6skills" rows="2", cols="60"></textarea>
+						<p></p>
+	 				 	<button id="generate" type="button" class="btn btn-primary">Generate</input>
+	 				</div> <!-- panel-body -->
+	 			</div> <!-- panel -->
+ 			</div> <!-- col -->
+			<div class="col-md-6">
+				<div id="settingspanel" class="panel panel-default">
+					<div class="panel-heading">
+						Settings
+						<span class="pull-right clickable"><i class="glyphicon glyphicon-minus"></i></span>
+					</div>
+					<div class="panel-body">
+						<table class="table">
+							<thead>
+								<tr>
+									<th>Skill Level</th>
+									<th>Size</th>
+									<th>Color</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr id="settingslevel1">
+									<td>1</td>
+									<td><input name="size" type="text"></input></td>
+									<td><input name="color" type="text"></input></td>
+								</tr>
+								<tr id="settingslevel2">
+									<td>2</td>
+									<td><input name="size" type="text"></input></td>
+									<td><input name="color" type="text"></input></td>
+								</tr>
+								<tr id="settingslevel3">
+									<td>3</td>
+									<td><input name="size" type="text"></input></td>
+									<td><input name="color" type="text"></input></td>
+								</tr>
+								<tr id="settingslevel4">
+									<td>4</td>
+									<td><input name="size" type="text"></input></td>
+									<td><input name="color" type="text"></input></td>
+								</tr>
+								<tr id="settingslevel5">
+									<td>5</td>
+									<td><input name="size" type="text"></input></td>
+									<td><input name="color" type="text"></input></td>
+								</tr>
+								<tr id="settingslevel6">
+									<td>6</td>
+									<td><input name="size" type="text"></input></td>
+									<td><input name="color" type="text"></input></td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</div>
+			</div> <!-- col -->
+		</div> <!-- row -->
+
+		<div class="row">
+			<div class="col-md-12">
+				<div id="outputpanel" class="panel panel-default">
+					<div class="panel-heading">
+			 		 	<div class="panel-title">
+							Output
+							<span class="pull-right clickable panel-collapsed"><i class="glyphicon glyphicon-plus"></i></span>
+						</div>
+					</div>
+					<div id="outputdiv" class="panel-body collapse">
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="row">
+			<div class="col-md-12">
+				<div class="panel panel-default">
+					<div class="panel-heading">
+						<div class="panel-title">
+							JSON Data
+							<span class="pull-right clickable panel-collapsed"><i class="glyphicon glyphicon-plus"></i></span>
+						</div>
+					</div>
+					<div id="jsonpanel" class="panel-body collapse">
+						<div id="rawjson-error" class="alert alert-danger collapse">
+						</div>
+						<textarea id="rawjson" rows="10" cols="100"></textarea>
+						<p></p>
+						<button id="parsejson" type="button" class="btn">Parse JSON</input>
+					</div>
+				</div>
+			</div>
+		</div> <!-- row -->
+	
+	</div> <!-- container -->
+</body>
+</html>
