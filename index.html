@@ -8,12 +8,16 @@
 		<link href="bower_components/bootstrap/dist/css/bootstrap-theme.css" rel="stylesheet">
 		<script src="bower_components/bootstrap/dist/js/bootstrap.js"></script>
 		<script>
-			function getLevelSettings(level) {
+			function getLevelSettings(level, def) {
 				var row = $("#settingslevel" + level);
-				return {
-					"size": row.find("input[name='size']").val(),
-					"color": row.find("input[name='color']").val(),
-				};
+				var s = {};
+				if(!def) {
+					s = {"size": row.find("input[name='size']").val(),
+							"color": row.find("input[name='color']").val(),}
+				}
+				if(!s.size) { s.size = 60 + 40*level; }
+				if(!s.color) { s.color = "#" + (0xdddddd-0x222222*level).toString(16); }
+				return s;
 			}
 
 			function splitSkills(skills) {
@@ -34,22 +38,23 @@
 						"level6": splitSkills($("#level6skills").val()),
 					};
 
-					saveSkillsToLocalStorage(skills);
-
 					return skills;
 			}
 
-			function gatherSettings() {
+			function gatherSettings(def) {
 					var settings = {
-						"level1": getLevelSettings(1),
-						"level2": getLevelSettings(1),
-						"level3": getLevelSettings(1),
-						"level4": getLevelSettings(1),
-						"level5": getLevelSettings(1),
-						"level6": getLevelSettings(1),
+						"level1": getLevelSettings(1, def),
+						"level2": getLevelSettings(2, def),
+						"level3": getLevelSettings(3, def),
+						"level4": getLevelSettings(4, def),
+						"level5": getLevelSettings(5, def),
+						"level6": getLevelSettings(6, def),
+						"sortorder": $("#sortorder").val(),
 					};
 
-					saveSettingsToLocalStorage(settings);
+					if(!settings.sortorder || def) {
+						settings.sortorder = "alpha";
+					}
 
 					return settings;
 			}
@@ -61,7 +66,7 @@
 					}
 			}
 
-			function saveSettingsToLocalStorage(skills) {
+			function saveSettingsToLocalStorage(settings) {
 					// If we have localStorage, store the settings there
 					if(localStorage) {
 						localStorage.setItem("settings", JSON.stringify(settings));
@@ -80,10 +85,10 @@
 						console.log(err);
 					}
 				
-					var settings = {};	
+					var settings = gatherSettings();	
 					if("settings" in localStorage) try {
 						var settingsStr = localStorage.getItem("settings");
-						var settings = JSON.parse(settingsStr);
+						settings = JSON.parse(settingsStr);
 					} catch (err) {
 						console.log(err);		
 					}
@@ -107,25 +112,20 @@
 				setLevelSettings(4, settings.level4);
 				setLevelSettings(5, settings.level5);
 				setLevelSettings(6, settings.level6);
+				$("#sortorder").val(settings.sortorder);
 			}
 
 			function setLevelSettings(level, setting) {
-				var row = $("settingslevel" + level);
-				if(setting.size > 0) {
-					row.find("input[name='size']").val(setting.size);
-				} else {
-					row.find("input[name='size']").val(60 + level*40);
-				}
-				if(setting.color != "") {
-					row.find("input[name='color']").val(setting.color);	
-				}
+				var row = $("#settingslevel" + level);
+				row.find("input[name='size']").val(setting.size);
+				row.find("input[name='color']").val(setting.color);	
 			}
 
 			function objectifySkill(skill, level) {
 				return { "skill": skill, "level": level }
 			}
 
-			function createSkillsCloud(skills) {
+			function createSkillsCloud(skills, settings) {
 				// First turn each skill into its own object
 				var allSkills = [];
 				skills.level1.forEach(function(v, i, arr) { allSkills.push(objectifySkill(v, 1)); })
@@ -136,7 +136,11 @@
 				skills.level6.forEach(function(v, i, arr) { allSkills.push(objectifySkill(v, 6)); })
 				
 				// Sort the skills array alphabetically by skill name
-				allSkills.sort(function(a, b) { return a.skill.localeCompare(b.skill); });
+				if(settings.sortorder == "alpha") {
+					allSkills.sort(function(a, b) { return a.skill.localeCompare(b.skill); });
+				} else {
+					shuffleArray(allSkills);
+				}
 
 				// Now generate HTML for all skills
 				var allHtml = [];
@@ -152,12 +156,18 @@
 			function generate() {
 				// Generate the JSON from the skills list
 				var skills = gatherSkills();
+				saveSkillsToLocalStorage(skills);
 				$("#rawjson").val(JSON.stringify(skills));
 				$("#rawjson-error").hide();
 
 				// Generate the HTML for the skills cloud
-				var html = createSkillsCloud(skills);
+				var settings = gatherSettings();
+				saveSettingsToLocalStorage(settings);
+				var html = createSkillsCloud(skills, settings);
 				$("#outputdiv").html(html);
+
+				// Apply settings (size and color) to generated HTML
+				applySettings(settings);
 
 				// Open the panel and scroll the view to it
 				openPanel($("#outputpanel span.clickable"));
@@ -168,13 +178,26 @@
 				}, 1000);
 			};
 
+			function applySettings(settings) {
+				for(var i=1; i<=6; i++) {
+					var setting = settings["level"+i];
+					$(".skilllevel" + i)
+						.css("font-size", setting.size + "%")
+						.css("color", setting.color);
+				}	
+			}
+
 			function parseJson() {
 				var parseError = $("#rawjson-error");
+				var successMsg = $("#rawjson-success");
 				try {
+					successMsg.hide();
 					parseError.hide();
 					var skillsStr = $("#rawjson").val();
 					var skills = JSON.parse(skillsStr);
 					setSkillsFields(skills);
+					successMsg.show();
+					setTimeout(function() { successMsg.fadeOut(2000); }, 5000);
 				} catch(err) {
 					parseError.text(err);
 					parseError.show();
@@ -202,10 +225,34 @@
 				panel.find('i').removeClass('glyphicon-plus').addClass('glyphicon-minus');
 			}
 
+			/**
+			 * Randomize array element order in-place.
+			 * Using Durstenfeld shuffle algorithm.
+			 */
+			function shuffleArray(array) {
+				for (var i = array.length - 1; i > 0; i--) {
+					var j = Math.floor(Math.random() * (i + 1));
+					var temp = array[i];
+					array[i] = array[j];
+					array[j] = temp;
+				}
+				return array;
+			}
+
+			function restoreDefaults() {
+				if(localStorage) {
+					localStorage.removeItem("settings");
+					saveSettingsToLocalStorage(gatherSettings(true));
+					saveSkillsToLocalStorage(gatherSkills());
+					restoreFromLocalStorage();
+				}	
+			}
+
 			// Document 'ready' function to delegate to functions above
 			$(function() {
 				$("#generate").click(generate);
 				$("#parsejson").click(parseJson);
+				$("#restore-defaults").click(restoreDefaults);
 				$(".panel-heading span.clickable").click(function (e) { togglePanel(this); });
 			}); 
 
@@ -306,6 +353,12 @@
 								</tr>
 							</tbody>
 						</table>
+						Sort order:
+						<select id="sortorder">
+							<option value="alpha">Alphabetical</option>
+							<option value="random">Random</option>
+						</select>
+						<button id="restore-defaults" class="pull-right btn btn-danger">Restore defaults</button>
 					</div>
 				</div>
 			</div> <!-- col -->
@@ -320,7 +373,7 @@
 							<span class="pull-right clickable panel-collapsed"><i class="glyphicon glyphicon-plus"></i></span>
 						</div>
 					</div>
-					<div id="outputdiv" class="panel-body collapse">
+					<div id="outputdiv" class="panel-body text-center collapse">
 					</div>
 				</div>
 			</div>
@@ -336,8 +389,8 @@
 						</div>
 					</div>
 					<div id="jsonpanel" class="panel-body collapse">
-						<div id="rawjson-error" class="alert alert-danger collapse">
-						</div>
+						<div id="rawjson-error" class="alert alert-danger collapse"></div>
+						<div id="rawjson-success" class="alert alert-success collapse">Success!</div>
 						<textarea id="rawjson" rows="10" cols="100"></textarea>
 						<p></p>
 						<button id="parsejson" type="button" class="btn">Parse JSON</input>
